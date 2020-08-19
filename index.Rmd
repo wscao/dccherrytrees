@@ -1,0 +1,5 @@
+---
+title: "Welcome Page"
+---
+
+**Welcome to the data visualization for the distribution of cherry trees in Washington DC. Please click on the tab "Cherry Trees in DC" for the analysis.**
