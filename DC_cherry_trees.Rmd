@@ -1,0 +1,319 @@
+---
+title: "The Distribution of Cherry Trees in Washington DC"
+author: "WS C"
+date: "July 18, 2020"
+output: 
+  html_document:
+    theme: cosmo
+    highlight: tango
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: hide
+    
+   
+---
+# Introduction
+
+I had long wished to see cherry blossom in Washington DC. However, this year has been a year of staying in, which makes me even more eager to see it. As a result, I pulled up cherry trees data from the open data portal and explored it before I can see it in person.
+In this notebook, I will first use `ggplot2` to map the cherry data and then play with `leaflet` to try the interactive visualization.
+
+# Data Preparation
+
+## Set Up
+```{r, setup, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = "center")
+library(leaflet) 
+library(tidyverse)
+library(funModeling) 
+library(readr)
+library(rgdal) 
+library(hexbin)
+```
+
+## Read in data and clean
+```{r, warning=FALSE, message=FALSE}
+trees <- read_csv("Urban_Forestry_Street_Trees.csv")
+head(trees)
+df_status(trees)
+```
+
+Rename variables to meaningful names and filter out rows that lack longitude or latitude.
+```{r}
+trees <- trees %>% 
+  rename(long= X, lat=Y, plant_names=CMMN_NM) %>% 
+  filter(!is.na(long) & !is.na(lat) & !is.na(plant_names))
+
+```
+
+Filter trees that has "cherry" in the plant names.
+```{r}
+cherry_trees <- trees %>% 
+  filter(str_detect(trees$plant_names, regex(".*cherry.*", ignore_case=TRUE))) %>% 
+  select(long, lat, plant_names)
+```
+
+Now we have the cherry data, we would like to see the cultivars and the quantity of each cultivar.
+
+```{r}
+
+cherry_trees %>% 
+  count(plant_names) %>% 
+  arrange(desc(n))
+```
+
+The most common cultivar is cherry without explicitly identifying its cultivar. There's no other evidence here that would help us determine what it is, so we will just go with its original name- Cherry. In addition, after a bit of googling, it turns out that Cherrybark Oak is not a cherry tree, although it has cherry in its name. Thus I will exclude that from the data and in the meantime, update Chokecherry and Cherry (Snowgoose) to make all of the names have the same pattern.
+
+```{r}
+
+cherry_trees <-  cherry_trees %>% 
+  filter(plant_names!="Cherrybark Oak") %>% 
+  mutate(plant_names=case_when(.$plant_names=="Chokecherry" ~ "Choke cherry",
+                               .$plant_names =="Cherry (Snowgoose)" ~ "Snowgoose cherry",
+                               TRUE ~ .$plant_names
+                              ))
+
+```
+
+
+Up till now the cherry tree data is ready. To map the cherry tree location to the map of DC, we need a DC map with neighborhoods boundaries. 
+
+## DC shapefile
+
+Read in the shapefile using `rgdal` package.
+
+```{r, shapefile, warning=FALSE}
+
+#create a folder to hold the dc shape files
+dir.create("dc_shape")
+unzip("Neighborhood_Clusters-shp.zip", exdir = "dc_shape")
+
+#read in the dc shape file 
+shp <- readOGR("dc_shape/Neighborhood_Clusters.shp")
+
+```
+
+Now both of the cherry tree and map data are ready, it is time to plot them out and see the distribution of the cherry.
+
+# Data Visualization
+
+## ggplot2 Basic visualization
+
+```{r, basicvis, message=FALSE}
+ggplot()+geom_polygon(data=shp, aes(long, lat, group=group), colour="black", fill=NA)+geom_point(data=cherry_trees, aes(long, lat))+theme_void()
+```
+
+The basic visualization is hard to detect the number of trees in the communities. Hex geom can better plot the density. In the following, I will change the geom to hex and the colour scheme to fit in the cherry blossom atmosphere!
+
+### Geom and Color Change
+```{r, message=FALSE}
+p <- ggplot()+geom_polygon(data=shp, aes(long, lat, group=group), colour="black", fill=NA)+
+  geom_hex(data=cherry_trees, aes(long, lat))+
+  scale_fill_gradient(name="No. of trees", low="#ffcee6", high = "#6B0772")+theme_void()
+print(p)
+```
+
+### Distribution of Different Cultivars
+
+Sometimes people have their preference when it comes to what kind of cherry trees to see, here I will subset the trees by `facet_wrap()` so people will know where to go based on the type of trees they prefer.
+
+```{r}
+p <- p+facet_wrap(~plant_names)
+print(p)
+
+# customize the plots
+
+p+labs(title=" The Distribution of Cherry Trees in Washington DC", 
+       caption="data source: Open Data DC 2020")+
+   theme(plot.title=element_text(hjust = 0.5, margin=margin(b=16)), 
+        legend.position = "bottom", legend.direction = "horizontal", 
+        legend.title = element_text(vjust=0.9, size = 8), 
+        legend.text = element_text(size=8), 
+        legend.box.spacing = unit(1, "cm"),
+        legend.key.size = unit(4, "mm"),
+        plot.caption = element_text(face = "italic", color = "#696969"))
+```
+
+
+I tried to add the neighborhoods names to the plots but it made the plots a mess. Next I will try to utilize `leaflet` package to build an interactive map with the neighborhoods names shown on the map.
+
+## Interactive visualization
+
+### DC Interactive map with neighborhood names shown
+
+First, I will use DC shape data `shp` to create an interactive map where you can see the corresponding neighborhood names when hovering over.
+
+```{r}
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(data=shp,
+              label = ~NBH_NAMES,
+              color = "444444",
+              weight=1,
+              smoothFactor = 0.5,
+              opacity = 1.0,
+              fillOpacity = 0.5,
+              highlightOptions = highlightOptions(color = "white",
+                                                  weight = 2,
+                                                  bringToFront = TRUE))
+```
+
+### Cherry Data Added to the Map
+
+Next, cherry data will be added as another layer to the map.
+
+```{r, interactivemap, message=FALSE}
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(data=shp,
+              label = ~NBH_NAMES,
+              color = "444444",
+              weight=1,
+              smoothFactor = 0.5,
+              opacity = 1.0,
+              fillOpacity = 0.5,
+              highlightOptions = highlightOptions(color = "white",
+                                                  weight = 2,
+                                                  bringToFront = TRUE)) %>% 
+  addMarkers(data=cherry_trees, clusterOptions = markerClusterOptions())
+```
+
+
+A few places we can tell from the map are good for appreciation of cherry blossom: Twining, Cleveland Park, Brightwood Park and Congress Heights.
+
+### Seprate Maps for Different Cultivars {.tabset .tabset-fade .tabset-pills}
+
+For people who have specific interests in certain kinds of cherry trees, below are the plots subsetting from the main one based on the type of cherry trees.
+
+#### Cherry {-}
+
+```{r, cherry, message=FALSE}
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(data=shp,
+              label = ~NBH_NAMES,
+              color = "444444",
+              weight=1,
+              smoothFactor = 0.5,
+              opacity = 1.0,
+              fillOpacity = 0.5,
+              highlightOptions = highlightOptions(color = "white",
+                                                  weight = 2,
+                                                  bringToFront = TRUE)) %>% 
+  addMarkers(data=cherry_trees %>% filter(plant_names=="Cherry"), 
+             clusterOptions = markerClusterOptions())
+```
+
+Places like Twinging, Brightwood Park and Brookland are densely distributed with Cherry.
+
+#### Yoshino cherry {-}
+
+```{r, yoshino, message=FALSE}
+
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(data=shp,
+              label = ~NBH_NAMES,
+              color = "444444",
+              weight=1,
+              smoothFactor = 0.5,
+              opacity = 1.0,
+              fillOpacity = 0.5,
+              highlightOptions = highlightOptions(color = "white",
+                                                  weight = 2,
+                                                  bringToFront = TRUE)) %>% 
+  addMarkers(data=cherry_trees %>% filter(plant_names=="Yoshino cherry"), 
+             clusterOptions = markerClusterOptions())
+
+
+```
+
+Clearly, Yoshino cherry trees are more densely grown in the northwest of the city. More specifically, Friendship Heights is the place with most Yoshino.
+
+
+#### Choke cherry {-}
+```{r, choke, message=FALSE}
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(data=shp,
+              label = ~NBH_NAMES,
+              color = "444444",
+              weight=1,
+              smoothFactor = 0.5,
+              opacity = 1.0,
+              fillOpacity = 0.5,
+              highlightOptions = highlightOptions(color = "white",
+                                                  weight = 2,
+                                                  bringToFront = TRUE)) %>% 
+  addMarkers(data=cherry_trees %>% filter(plant_names=="Choke cherry"), 
+             clusterOptions = markerClusterOptions())
+```
+
+People who have an penchant for Choke cherry should go to the east and southeast of DC. Places like Sheridan and Deanwood are good for Choke cherry.
+
+
+#### Kwanzan cherry {-}
+
+```{r, kwanzan, message=FALSE}
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(data=shp,
+              label = ~NBH_NAMES,
+              color = "444444",
+              weight=1,
+              smoothFactor = 0.5,
+              opacity = 1.0,
+              fillOpacity = 0.5,
+              highlightOptions = highlightOptions(color = "white",
+                                                  weight = 2,
+                                                  bringToFront = TRUE)) %>% 
+  addMarkers(data=cherry_trees %>% filter(plant_names=="Kwanzan cherry"), 
+             clusterOptions = markerClusterOptions())
+```
+
+Most of the Kwanzan cherry are located in the west of DC. If people go to Spring Valley and Friendship Heights, they should have a blast at the Kwanzan cherry.
+
+#### Snowgoose cherry {-}
+
+```{r, snowgoose, message=FALSE}
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(data=shp,
+              label = ~NBH_NAMES,
+              color = "444444",
+              weight=1,
+              smoothFactor = 0.5,
+              opacity = 1.0,
+              fillOpacity = 0.5,
+              highlightOptions = highlightOptions(color = "white",
+                                                  weight = 2,
+                                                  bringToFront = TRUE)) %>% 
+  addMarkers(data=cherry_trees %>% filter(plant_names=="Snowgoose cherry"), 
+             clusterOptions = markerClusterOptions())
+```
+
+If you are a big fan of Snowgoose cherry, you know where you should go- Cleveland Park, Friendship Heights, Brightwood Park and Takoma!
+
+#### Okame cherry {-}
+
+```{r, koame, message=FALSE}
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(data=shp,
+              label = ~NBH_NAMES,
+              color = "444444",
+              weight=1,
+              smoothFactor = 0.5,
+              opacity = 1.0,
+              fillOpacity = 0.5,
+              highlightOptions = highlightOptions(color = "white",
+                                                  weight = 2,
+                                                  bringToFront = TRUE)) %>% 
+  addMarkers(data=cherry_trees %>% filter(plant_names=="Okame cherry"), 
+             clusterOptions = markerClusterOptions())
+
+```
+
+The west side of DC boasts the most Okame cherry trees. Spring Valley, Friendship Heights and Takoma are great to see Okame. 
+
+When the next cherry blossom season sets in, I hope you have an idea where you want to go for the best experience!
