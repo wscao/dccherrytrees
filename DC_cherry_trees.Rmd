@@ -1,22 +1,5 @@
 ---
 title: "The Distribution of Cherry Trees in Washington DC"
-knit: (function(input_file, encoding) {
-  out_dir <- 'docs';
-  rmarkdown::render(input_file,
- encoding=encoding,
- output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
-author: "WS C"
-date: "July 18, 2020"
-output: 
-  html_document:
-    theme: cosmo
-    highlight: tango
-    toc: true
-    toc_float: true
-    number_sections: true
-    code_folding: hide
-    
-   
 ---
 # Introduction
 
@@ -90,11 +73,11 @@ Read in the shapefile using `rgdal` package.
 ```{r, shapefile, warning=FALSE}
 
 #create a folder to hold the dc shape files
-dir.create("dc_shape")
-unzip("Neighborhood_Clusters-shp.zip", exdir = "dc_shape")
+dir.create("dc_shape1")
+unzip("Neighborhood_Clusters-shp.zip", exdir = "dc_shape1")
 
 #read in the dc shape file 
-shp <- readOGR("dc_shape/Neighborhood_Clusters.shp")
+shp <- readOGR("dc_shape1/Neighborhood_Clusters.shp")
 
 ```
 

@@ -1,0 +1,17 @@
+name: "dccherrytrees"
+output_dir: "docs"
+navbar:
+  title: "The cherry trees in DC"
+  left:
+    - text: "Home"
+      href: index.html
+    - text: "Cherry Trees in DC"
+      href: DC_cherry_trees.html
+output: 
+  html_document:
+    theme: cosmo
+    highlight: tango
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: hide
